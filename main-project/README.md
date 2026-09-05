@@ -101,3 +101,5 @@ URLを自分のWorkerのURL（例: `https://your-worker.workers.dev/v1/messages`
 - [ ] `lp/index.html` のプレースホルダー（ココナラ・クラウドワークスのプロフィールURL等）を埋める
 - [ ] `portfolio-texts/` の文面を仕上げてココナラ・クラウドワークスに登録する
 - [ ] 公開・発信する（X、note等でツールの紹介と合わせて告知するのも効果的）
+
+updatetest
