@@ -1,0 +1,6 @@
+name = "meeting-tool-cors-proxy"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# このWorkerはシークレット登録不要です。
+# ユーザーが入力した自分のAPIキーを、そのままAnthropicへ中継するだけの構成のため。

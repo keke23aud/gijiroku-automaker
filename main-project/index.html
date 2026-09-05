@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>議事録オートメーカー（MVP）</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --ink: #1f2320;
+    --ink-soft: #5b625c;
+    --border: #e3e1db;
+    --accent: #2f6f4f;
+    --accent-ink: #ffffff;
+    --danger: #b3261e;
+    --danger-bg: #fdecea;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171a;
+      --panel: #1d2023;
+      --ink: #ecefec;
+      --ink-soft: #9aa39c;
+      --border: #33383a;
+      --accent: #4fae7c;
+      --accent-ink: #0c140f;
+      --danger: #ff8a80;
+      --danger-bg: #3a1f1d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    line-height: 1.6;
+  }
+  header {
+    padding: 28px 20px 8px;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  header h1 {
+    font-size: 22px;
+    margin: 0 0 6px;
+  }
+  header p {
+    color: var(--ink-soft);
+    margin: 0;
+    font-size: 14px;
+  }
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 12px 20px 60px;
+    display: grid;
+    gap: 16px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin: 4px 0 0;
+  }
+  input[type="password"],
+  input[type="text"],
+  textarea,
+  select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  textarea {
+    min-height: 220px;
+    resize: vertical;
+  }
+  .row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .row > div { flex: 1; min-width: 180px; }
+  button {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  button.secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--border);
+  }
+  .actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .error {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+  .result h2 {
+    font-size: 16px;
+    margin: 0 0 8px;
+  }
+  .result-block {
+    margin-bottom: 18px;
+  }
+  .result-block:last-child { margin-bottom: 0; }
+  ul.tasks {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 8px;
+  }
+  ul.tasks li {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  ul.tasks li .meta {
+    display: block;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+  .decisions, .summary-text {
+    font-size: 14px;
+  }
+  .decisions ul {
+    margin: 0;
+    padding-left: 20px;
+  }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    display: inline-block;
+    animation: spin 0.7s linear infinite;
+    vertical-align: -2px;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  footer {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 0 20px 40px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>議事録オートメーカー</h1>
+  <p>会議の文字起こしを貼り付けるだけで、要約・決定事項・タスク一覧を自動抽出します。あなた自身のClaude APIキーを使うので、サーバー側の運用コストはかかりません。</p>
+</header>
+
+<main>
+  <section class="panel">
+    <label for="apiKey">Claude APIキー</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" />
+    <p class="hint">
+      このキーはお使いのブラウザからClaude APIへ直接送信されるだけで、どこにも保存・送信されません
+      （ページを再読み込みすると再入力が必要です）。キーは
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>
+      から取得できます。
+    </p>
+  </section>
+
+  <section class="panel">
+    <label for="transcript">会議の文字起こしテキスト</label>
+    <textarea id="transcript" placeholder="ここに文字起こしテキストを貼り付けてください..."></textarea>
+    <div class="row" style="margin-top:12px;">
+      <div>
+        <label for="modelSelect">モデル</label>
+        <select id="modelSelect">
+          <option value="claude-sonnet-5">claude-sonnet-5（推奨・バランス型）</option>
+          <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001（高速・低コスト）</option>
+        </select>
+        <p class="hint">モデル名は変わることがあります。最新の一覧は
+          <a href="https://docs.claude.com/en/docs/about-claude/models" target="_blank" rel="noopener">公式ドキュメント</a>
+          で確認してください。</p>
+      </div>
+      <div>
+        <label for="loadSample">サンプルを試す</label>
+        <select id="loadSample">
+          <option value="">サンプルを選択...</option>
+          <option value="sample1">サンプル1: 週次進捗会議</option>
+          <option value="sample2">サンプル2: 新商品企画ミーティング</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:14px;">
+      <button id="runBtn">要約・タスク抽出を実行</button>
+      <button id="clearBtn" class="secondary" type="button">クリア</button>
+    </div>
+  </section>
+
+  <section id="errorBox" class="panel error" hidden></section>
+
+  <section id="resultPanel" class="panel result" hidden>
+    <div class="actions" style="justify-content: space-between; margin-bottom: 14px;">
+      <h2 style="margin:0;">結果</h2>
+      <button id="copyBtn" class="secondary" type="button">結果をコピー</button>
+    </div>
+
+    <div class="result-block">
+      <h3>要約</h3>
+      <p class="summary-text" id="summaryText"></p>
+    </div>
+
+    <div class="result-block">
+      <h3>決定事項</h3>
+      <div class="decisions" id="decisionsBox"></div>
+    </div>
+
+    <div class="result-block">
+      <h3>タスク一覧</h3>
+      <ul class="tasks" id="tasksBox"></ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  データはお使いのブラウザからAnthropic社のClaude APIへ直接送信されます（開発者のサーバーを経由しません）。
+  会議内容の取り扱いには十分ご注意ください。
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ------------------------------------------------------------------
+  // サンプルデータ（デモ用の架空の会議データ）
+  // ------------------------------------------------------------------
+  var SAMPLES = {
+    sample1: null, // demo_meeting_1.txt の内容をここに読み込む想定（同梱のsamplesフォルダ参照）
+    sample2: null
+  };
+
+  // ------------------------------------------------------------------
+  // DOM参照
+  // ------------------------------------------------------------------
+  var $ = function (id) { return document.getElementById(id); };
+  var apiKeyEl = $("apiKey");
+  var transcriptEl = $("transcript");
+  var modelSelectEl = $("modelSelect");
+  var loadSampleEl = $("loadSample");
+  var runBtn = $("runBtn");
+  var clearBtn = $("clearBtn");
+  var errorBox = $("errorBox");
+  var resultPanel = $("resultPanel");
+  var summaryText = $("summaryText");
+  var decisionsBox = $("decisionsBox");
+  var tasksBox = $("tasksBox");
+  var copyBtn = $("copyBtn");
+
+  var lastResultText = "";
+
+  // ------------------------------------------------------------------
+  // サンプル読み込み（fetchでsamples/*.txtを取得。file://で開いた場合は失敗するので
+  // その場合はローカルサーバー経由 [例: python -m http.server] で開いてください）
+  // ------------------------------------------------------------------
+  loadSampleEl.addEventListener("change", function () {
+    var key = loadSampleEl.value;
+    if (!key) return;
+    var file = key === "sample1" ? "samples/demo_meeting_1.txt" : "samples/demo_meeting_2.txt";
+    fetch(file)
+      .then(function (res) {
+        if (!res.ok) throw new Error("sample fetch failed");
+        return res.text();
+      })
+      .then(function (text) {
+        transcriptEl.value = text;
+      })
+      .catch(function () {
+        showError(
+          "サンプルの読み込みに失敗しました。file:// で直接開いている場合は、\n" +
+          "ターミナルで `python -m http.server` などを実行し、http://localhost:8000 経由で開いてください。\n" +
+          "（samples/ フォルダのテキストファイルを直接コピー＆ペーストしても構いません）"
+        );
+      });
+  });
+
+  clearBtn.addEventListener("click", function () {
+    transcriptEl.value = "";
+    hideError();
+    resultPanel.hidden = true;
+  });
+
+  runBtn.addEventListener("click", run);
+
+  copyBtn.addEventListener("click", function () {
+    if (!lastResultText) return;
+    navigator.clipboard.writeText(lastResultText).then(function () {
+      copyBtn.textContent = "コピーしました！";
+      setTimeout(function () { copyBtn.textContent = "結果をコピー"; }, 1500);
+    });
+  });
+
+  function showError(message) {
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+  function hideError() {
+    errorBox.hidden = true;
+    errorBox.textContent = "";
+  }
+
+  function setLoading(isLoading) {
+    runBtn.disabled = isLoading;
+    runBtn.innerHTML = isLoading
+      ? '<span class="spinner"></span>解析中...'
+      : "要約・タスク抽出を実行";
+  }
+
+  // ------------------------------------------------------------------
+  // Claude APIへのリクエスト本体
+  //
+  // anthropic-dangerous-direct-browser-access ヘッダーを付けることで、
+  // サーバー側のプロキシなしにブラウザから直接Claude APIを呼び出せます。
+  // どうしてもCORSで弾かれる場合は、同梱の cors-proxy-worker (Cloudflare Workers)
+  // を使う構成に切り替えてください（README参照）。
+  // ------------------------------------------------------------------
+  var SYSTEM_PROMPT = [
+    "あなたはプロの議事録作成アシスタントです。",
+    "与えられた会議の文字起こしから、以下のJSON形式のみを出力してください。",
+    "説明文やコードブロックの記号(```)は一切付けず、JSONオブジェクトそのものだけを返してください。",
+    "",
+    "{",
+    '  "summary": "会議全体の要約（日本語で3〜5文程度）",',
+    '  "decisions": ["決定事項1", "決定事項2", ...],',
+    '  "tasks": [',
+    '    {"task": "タスク内容", "owner": "担当者名（不明な場合は空文字）", "due": "期限（不明な場合は空文字）"}',
+    "  ]",
+    "}",
+    "",
+    "決定事項やタスクが文字起こし中に存在しない場合は、空の配列を返してください。",
+    "担当者・期限が明記されていない場合は、無理に推測せず空文字にしてください。"
+  ].join("\n");
+
+  function run() {
+    hideError();
+    resultPanel.hidden = true;
+
+    var apiKey = apiKeyEl.value.trim();
+    var transcript = transcriptEl.value.trim();
+    var model = modelSelectEl.value;
+
+    if (!apiKey) {
+      showError("Claude APIキーを入力してください。");
+      return;
+    }
+    if (!transcript) {
+      showError("会議の文字起こしテキストを貼り付けてください。");
+      return;
+    }
+
+    setLoading(true);
+
+    fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: 2000,
+        system: SYSTEM_PROMPT,
+        messages: [
+          { role: "user", content: "以下の会議の文字起こしを処理してください。\n\n" + transcript }
+        ]
+      })
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (t) {
+            throw new Error("API_ERROR:" + res.status + ":" + t);
+          });
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var textParts = (data.content || [])
+          .filter(function (p) { return p.type === "text"; })
+          .map(function (p) { return p.text; });
+        var raw = textParts.join("").trim();
+        var parsed = parseModelJson(raw);
+        renderResult(parsed);
+      })
+      .catch(function (err) {
+        handleError(err);
+      })
+      .finally(function () {
+        setLoading(false);
+      });
+  }
+
+  function parseModelJson(raw) {
+    // モデルが万が一```json ... ```で包んできた場合の保険
+    var cleaned = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "");
+    try {
+      return JSON.parse(cleaned);
+    } catch (e) {
+      throw new Error("PARSE_ERROR:" + raw);
+    }
+  }
+
+  function handleError(err) {
+    var msg = String(err.message || err);
+    if (msg.indexOf("API_ERROR:401") === 0) {
+      showError("認証エラー：APIキーが正しいか確認してください。");
+    } else if (msg.indexOf("API_ERROR:429") === 0) {
+      showError("レート制限またはクレジット不足の可能性があります。しばらく待つか、Anthropic Consoleで利用状況を確認してください。");
+    } else if (msg.indexOf("API_ERROR:") === 0) {
+      showError("APIエラーが発生しました。\n" + msg);
+    } else if (msg.indexOf("PARSE_ERROR:") === 0) {
+      showError("モデルの応答をJSONとして解析できませんでした。もう一度実行してみてください。\n\n応答内容:\n" + msg.slice(12, 500));
+    } else if (msg.indexOf("Failed to fetch") !== -1 || msg.indexOf("NetworkError") !== -1) {
+      showError(
+        "通信エラーが発生しました。ブラウザやネットワーク環境によってはClaude APIへの直接リクエストが" +
+        "ブロックされる場合があります。その場合は同梱のcors-proxy-workerを使う構成に切り替えてください（README参照）。"
+      );
+    } else {
+      showError("予期しないエラーが発生しました。\n" + msg);
+    }
+  }
+
+  function renderResult(parsed) {
+    summaryText.textContent = parsed.summary || "（要約なし）";
+
+    decisionsBox.innerHTML = "";
+    if (parsed.decisions && parsed.decisions.length) {
+      var ul = document.createElement("ul");
+      parsed.decisions.forEach(function (d) {
+        var li = document.createElement("li");
+        li.textContent = d;
+        ul.appendChild(li);
+      });
+      decisionsBox.appendChild(ul);
+    } else {
+      decisionsBox.textContent = "決定事項は見つかりませんでした。";
+    }
+
+    tasksBox.innerHTML = "";
+    if (parsed.tasks && parsed.tasks.length) {
+      parsed.tasks.forEach(function (t) {
+        var li = document.createElement("li");
+        var meta = [];
+        if (t.owner) meta.push("担当: " + t.owner);
+        if (t.due) meta.push("期限: " + t.due);
+        li.innerHTML = escapeHtml(t.task) +
+          (meta.length ? '<span class="meta">' + escapeHtml(meta.join(" / ")) + "</span>" : "");
+        tasksBox.appendChild(li);
+      });
+    } else {
+      var li = document.createElement("li");
+      li.textContent = "タスクは見つかりませんでした。";
+      tasksBox.appendChild(li);
+    }
+
+    lastResultText = buildPlainText(parsed);
+    resultPanel.hidden = false;
+    resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function buildPlainText(parsed) {
+    var lines = [];
+    lines.push("【要約】");
+    lines.push(parsed.summary || "（なし）");
+    lines.push("");
+    lines.push("【決定事項】");
+    if (parsed.decisions && parsed.decisions.length) {
+      parsed.decisions.forEach(function (d) { lines.push("- " + d); });
+    } else {
+      lines.push("（なし）");
+    }
+    lines.push("");
+    lines.push("【タスク一覧】");
+    if (parsed.tasks && parsed.tasks.length) {
+      parsed.tasks.forEach(function (t) {
+        var meta = [];
+        if (t.owner) meta.push("担当: " + t.owner);
+        if (t.due) meta.push("期限: " + t.due);
+        lines.push("- " + t.task + (meta.length ? "（" + meta.join(" / ") + "）" : ""));
+      });
+    } else {
+      lines.push("（なし）");
+    }
+    return lines.join("\n");
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+})();
+</script>
+
+</body>
+</html>
